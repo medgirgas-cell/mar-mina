@@ -173,7 +173,7 @@ function syncAuto(){
   db.students.forEach(s=>{if(db.att[d][s.id]==='A'&&!db.fu.some(f=>f.sid===s.id&&(f.sess===d||(!f.auto&&f.date>=d))))db.fu.push(mkTask(s.id,d))});
   if(db.fu.length!==n)save();
 }
-const fuCount=id=>db.fu.filter(f=>f.sid===id&&!f.open).length;
+const fuCount=id=>db.fu.filter(f=>f.sid===id&&!f.open&&!f.cov).length;
 function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(db));bc&&bc.postMessage('upd')}catch(e){toast('تعذر الحفظ على هذا المتصفح')}}
 function save(){saveLocal();schedSync()}
 if(bc)bc.onmessage=()=>{db=load();applyTheme();render()};
@@ -540,7 +540,7 @@ function profCharts(t,e){
 function vStudents(){
   const q=state.q.trim(),dg=dupGroups();
   const list=fsorted().filter(s=>!q||(s.name+' '+(can('contact')?s.phone+' '+s.address:'')).includes(q));
-  return (dg.length?`<div class="card noprint" style="background:var(--wab);border-color:var(--wa)"><div class="row sp"><span>⚠ يوجد <b>${dg.length}</b> مجموعة أسماء مكررة محتملة</span><button class="btn sm pri" data-act="dupRev">مراجعة ودمج</button></div></div>`:'')+`<div class="card"><div class="row sp"><input id="q" placeholder="🔍 بحث بالاسم أو الرقم أو العنوان" value="${esc(state.q)}" style="flex:1;min-width:200px"><div class="row"><button class="btn" data-act="cards">🪪 طباعة البطاقات</button><button class="btn pri" data-act="addStudent">+ إضافة شاب</button></div></div>${grChips()}</div>
+  return (dg.length?`<div class="card noprint" style="background:var(--wab);border-color:var(--wa)"><div class="row sp"><span>⚠ يوجد <b>${dg.length}</b> مجموعة أسماء مكررة محتملة</span><button class="btn sm pri" data-act="dupRev">مراجعة ودمج</button></div></div>`:'')+`<div class="card"><div class="row sp"><input id="q" placeholder="🔍 بحث بالاسم أو الرقم أو العنوان" value="${esc(state.q)}" style="flex:1;min-width:200px"><div class="row">${can('contact')?'<button class="btn" data-act="phones">📇 أرقام التليفونات</button>':''}<button class="btn" data-act="cards">🪪 طباعة البطاقات</button><button class="btn pri" data-act="addStudent">+ إضافة شاب</button></div></div>${grChips()}</div>
   <div class="card"><div class="tw"><table><tr><th>م</th><th>الاسم</th><th>المرحلة</th><th>التليفون</th><th>العنوان</th><th>تواصل</th><th></th></tr>
   ${list.map((s,i)=>`<tr><td>${i+1}</td><td>${av(s)}<a href="#" data-act="profile" data-id="${s.id}"><b>${esc(s.name)}</b></a>${bdBadge(s)}${s.notes?`<div class="muted">📝 ${esc(s.notes)}</div>`:''}</td><td>${grBadge(s)}</td><td>${can('contact')?esc(s.phone):'—'}</td><td>${can('contact')?esc(s.address):'—'}</td><td>${contact(s)}</td><td><button class="btn sm" data-act="editStudent" data-id="${s.id}">تعديل</button> <button class="btn sm dng" data-act="delStudent" data-id="${s.id}">حذف</button></td></tr>`).join('')}</table></div>
   ${list.length?'':'<div class="empty">لا توجد نتائج</div>'}</div>`;
@@ -568,7 +568,7 @@ function totalOf(x){const v=['h','l','r'].filter(k=>x[k]!==''&&x[k]!=null);retur
 function tHtml(t){return t==null?'—':`<b>${t}</b>/15 <span class="badge ${gcls(t)}">${grade(t)}</span>`}
 
 function vFu(){
-  const list=db.fu.slice().sort((a,b)=>b.date.localeCompare(a.date)).filter(f=>!f.open&&(state.fuF==='all'||(f.next&&!f.done)));
+  const list=db.fu.slice().sort((a,b)=>b.date.localeCompare(a.date)).filter(f=>!f.open&&!f.cov&&(state.fuF==='all'||(f.next&&!f.done)));
   const opts=sorted().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const open=db.fu.filter(f=>f.open&&stu(f.sid)).sort((a,b)=>b.date.localeCompare(a.date));
   const auto=`<div class="card"><h2>📞 مطلوب افتقادهم <span class="badge ${open.length?'r':'g'}">${open.length}</span></h2><p class="muted" style="margin-top:0">تظهر هنا تلقائيًا بمجرد تسجيل الغياب، وتختفي بعد تسجيل الافتقاد.</p>${open.length>1?`<div style="margin-bottom:10px"><button class="btn pri" data-act="gneed">📣 رسالة جماعية للمطلوب افتقادهم (${open.length})</button></div>`:''}
@@ -608,9 +608,10 @@ function gPrev(){
   const e=$('#gprev');if(!e)return;const rs=sorted().filter(s=>G.sel[s.id]);
   e.innerHTML='<b>معاينة'+(rs[0]?' ('+esc(gFirst(rs[0]))+')':'')+':</b> '+esc(rs[0]?gMsg(rs[0]):gText().replace(/\{الاسم\}/g,'مينا'))+'<div class="muted">'+gText().length+' حرف</div>';
 }
+function coverOpen(f){let k=0;db.fu.forEach(x=>{if(x!==f&&x.sid===f.sid&&x.open){x.open=false;x.cov=true;x.method=f.method;x.result=f.result;x.date=f.date;k++}});return k}
 function logFu(id,m){
   const o=db.fu.find(f=>f.sid===id&&f.open);
-  if(o){o.open=false;o.method='رسالة';o.result='رسالة جماعية ('+m+')';o.date=today()}
+  if(o){o.open=false;o.method='رسالة';o.result='رسالة جماعية ('+m+')';o.date=today();coverOpen(o)}
   else db.fu.push({id:uid(),sid:id,date:today(),method:'رسالة',result:'رسالة جماعية ('+m+')',note:'',next:'',done:false});
   save();
 }
@@ -682,7 +683,7 @@ function profile(id){
   const s=stu(id);if(!s)return;const t=stats(id),e=evAvg(id);
   const ds=sessions().slice(-12);
   const evs=Object.keys(db.ev).sort().reverse().filter(d=>db.ev[d][id]&&(totalOf(db.ev[d][id])!=null||db.ev[d][id].n)).slice(0,8);
-  const fus=db.fu.filter(f=>f.sid===id&&!f.open).sort((a,b)=>b.date.localeCompare(a.date));
+  const fus=db.fu.filter(f=>f.sid===id&&!f.open&&!f.cov).sort((a,b)=>b.date.localeCompare(a.date));
   openM(`<div class="row sp"><h2 style="margin:0;display:flex;align-items:center">${av(s,64)}${esc(s.name)}</h2><button class="btn sm" data-act="closeM">✕</button></div>
   ${can('stu')?`<div class="row" style="margin:6px 0"><label class="btn sm" style="margin:0;color:var(--tx)">📷 كاميرا<input type="file" data-ph="p" data-id="${s.id}" accept="image/*" capture="user" hidden></label><label class="btn sm" style="margin:0;color:var(--tx)">🖼 تغيير الصورة<input type="file" data-ph="p" data-id="${s.id}" accept="image/*" hidden></label></div>`:''}<p class="muted">${can('contact')?`📞 ${esc(s.phone)||'—'} ${s.parentPhone?' • ولي الأمر: '+esc(s.parentPhone):''}<br>📍 ${esc(s.address)||'—'}`:'🔒 بيانات التواصل مخفية'}${s.grade?'<br>🎓 '+esc(s.grade):''}${s.birth?'<br>🎂 '+fd(s.birth)+bdNote(s):''}</p>
   ${s.notes?`<div class="card" style="background:var(--in)">📝 ${esc(s.notes)}</div>`:''}
@@ -763,7 +764,7 @@ document.addEventListener('click',e=>{
       db.fu=db.fu.filter(x=>!(x.open&&x.sid===sid));
       db.fu.push({id:uid(),sid,date:$('#fuD').value||today(),method:$('#fuM').value,result:res,note,next:$('#fuN').value,done:false});
       save();render();toast('تم تسجيل الافتقاد');break}
-    case 'fuClose':{const f=db.fu.find(x=>x.id===id);if(f){f.open=false;f.method=$('#fm-'+id).value;f.result=$('#fr-'+id).value.trim();f.next=$('#fn-'+id).value;f.date=today();save();render();toast('تم تسجيل الافتقاد ✓')}break}
+    case 'fuClose':{const f=db.fu.find(x=>x.id===id);if(f){f.open=false;f.method=$('#fm-'+id).value;f.result=$('#fr-'+id).value.trim();f.next=$('#fn-'+id).value;f.date=today();const k=coverOpen(f);save();render();toast('تم تسجيل الافتقاد ✓'+(k?' (وشمل '+k+' غياب سابق)':''))}break}
     case 'fuDone':{const f=db.fu.find(x=>x.id===id);if(f){f.done=true;save();render()}break}
     case 'fuDel':if(confirm('حذف السجل؟')){db.fu=db.fu.filter(x=>x.id!==id);save();render()}break;
     case 'fuF':state.fuF=t.dataset.v;render();break;
@@ -2584,6 +2585,39 @@ async function scanOpen(){
   $('#scX').onclick=()=>{run=false;stream.getTracks().forEach(t=>t.stop());o.remove();render();if(n)toast('تم تسجيل حضور '+n)};
 }
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(a==='cards'){e.preventDefault();cardsDlg(t.dataset.id)}else if(a==='scan'){e.preventDefault();scanOpen()}});
+
+/* ===== تصدير أرقام التليفونات (جهات اتصال / نسخ / CSV) ===== */
+function phoneRows(w){
+  const seen=new Set(),rows=[];let none=0;
+  fsorted().forEach(s=>{
+    let got=false;
+    [['s',s.phone,s.name],['p',s.parentPhone,'ولي أمر '+s.name]].forEach(([k,p,nm])=>{
+      if(!w[k])return;const n=waNum(p);if(!n||n.length<10)return;
+      if(seen.has(n))return;seen.add(n);rows.push({s,nm,num:n,kind:k});got=true});
+    if(!got)none++;
+  });
+  return {rows,none};
+}
+const vEsc=t=>String(t||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
+function vcfOf(rows){
+  return rows.map(r=>['BEGIN:VCARD','VERSION:3.0','FN:'+vEsc(r.nm),'N:'+vEsc(r.nm)+';;;;','TEL;TYPE=CELL:+'+r.num,'ORG:'+vEsc(db.settings.cls||'شباب ثانوي'),'END:VCARD'].join('\r\n')).join('\r\n')+'\r\n';
+}
+function phonesDlg(){
+  if(!can('contact')){toast('🔒 ليس لديك صلاحية');return}
+  openM(`<div class="row sp"><h2 style="margin:0">📇 أرقام التليفونات</h2><button class="btn sm" data-act="closeM">✕</button></div>
+  <p class="muted">${state.gr?'المرحلة: <b>'+esc(state.gr)+'</b>':'كل المراحل'} — خد نسخة من الأرقام وسجّلها في تليفونك عشان تتصل أو تعاود الاتصال.</p>
+  <div class="row"><label style="margin:0"><input type="checkbox" id="phS" checked> رقم الشاب</label><label style="margin:0"><input type="checkbox" id="phP" checked> رقم ولي الأمر</label></div>
+  <div id="phInfo" class="muted" style="margin:8px 0"></div>
+  <div class="row"><button class="btn pri" id="phV">📇 ملف جهات الاتصال (VCF)</button><button class="btn" id="phC">📋 نسخ القائمة</button><button class="btn" id="phX">⬇ CSV</button></div>
+  <p class="muted" style="margin-top:10px">ملف VCF: افتحه من الموبايل (أو من تطبيق جهات الاتصال ← استيراد) وكل الأسماء والأرقام تتسجّل مرة واحدة.</p>`);
+  const cur=()=>phoneRows({s:$('#phS').checked,p:$('#phP').checked});
+  const info=()=>{const r=cur();$('#phInfo').innerHTML='عدد الأرقام: <b>'+r.rows.length+'</b>'+(r.none?' — '+r.none+' شاب بدون رقم صالح':'')};
+  $('#phS').onchange=$('#phP').onchange=info;info();
+  $('#phV').onclick=()=>{const r=cur().rows;if(!r.length){toast('لا توجد أرقام');return}dl('جهات_الاتصال.vcf',vcfOf(r),'text/vcard;charset=utf-8');logEv('تصدير جهات الاتصال (VCF)');toast('تم تجهيز '+r.length+' جهة اتصال')};
+  $('#phC').onclick=()=>{const r=cur().rows;if(!r.length){toast('لا توجد أرقام');return}copyT(r.map(x=>x.nm+' — '+x.num.replace(/^20/,'0')).join('\n'))};
+  $('#phX').onclick=()=>{const r=cur().rows;if(!r.length){toast('لا توجد أرقام');return}dl('الأرقام.csv',csv([['الاسم','الرقم','النوع','المرحلة']].concat(r.map(x=>[x.nm,x.num.replace(/^20/,'0'),x.kind==='s'?'الشاب':'ولي الأمر',x.s.grade||'']))),'text/csv');logEv('تصدير الأرقام (CSV)')};
+}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="phones"]');if(t){e.preventDefault();phonesDlg()}});
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>

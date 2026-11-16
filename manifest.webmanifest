@@ -29,5 +29,10 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "id": "./index.html",
+  "categories": [
+    "education",
+    "productivity"
   ]
 }
