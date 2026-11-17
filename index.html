@@ -130,6 +130,7 @@ body.locked header,body.locked nav,body.locked main{display:none}
   <span class="sub" id="whoami"></span>
   <button class="btn sm" data-act="logout" id="lockBtn" style="display:none">🔒 خروج</button>
   <button class="btn sm" data-act="syncChip" id="syncChip">☁ المزامنة: غير مفعّلة</button>
+  <button class="btn sm" data-act="devs" id="devChip" style="display:none">👥</button>
   <button class="btn sm" id="instBtn" style="display:none;background:#f2a900;border-color:#f2a900;color:#1d2433;font-weight:bold">📲 تثبيت التطبيق</button>
   <button class="btn sm" data-act="theme" id="themeBtn">🌙 داكن</button>
 </header>
@@ -349,7 +350,7 @@ function syncCard(){
   const RULES='{"rules":{".read":false,".write":false,"youth":{"$room":{".read":true,".write":true}}}}';
   return `<div class="card"><h2>☁ المزامنة بين الأجهزة</h2>
   ${on?`<p>✅ المزامنة <b>مفعّلة</b>: أي تعديل يظهر على باقي الأجهزة خلال ثوانٍ. ${sStat.s==='err'?`<span class="badge r">${esc(sStat.m)}</span>`:''}</p>
-  <div class="row"><button class="btn pri" data-act="syncNow">🔄 مزامنة الآن</button><button class="btn" data-act="syncCode">🔗 رمز الربط لجهاز آخر</button><button class="btn dng" data-act="syncOff">إيقاف المزامنة</button></div><div id="syncCodeBox" style="margin-top:10px"></div>`
+  <div class="row"><button class="btn pri" data-act="syncNow">🔄 مزامنة الآن</button><button class="btn" data-act="devs">👥 الأجهزة المتصلة</button><button class="btn" data-act="syncCode">🔗 رمز الربط لجهاز آخر</button><button class="btn dng" data-act="syncOff">إيقاف المزامنة</button></div><div id="syncCodeBox" style="margin-top:10px"></div>`
   :`<p class="muted" style="margin-top:0">لتستخدم النظام من أكثر من جهاز (موبايل + كمبيوتر + خادم آخر) بنفس البيانات. تحتاج تجهيزًا لمرة واحدة بحساب جوجل (مجاني).</p>
   <details><summary><b>① خطوات التجهيز</b></summary><ol class="muted" style="line-height:2">
   <li>ادخل <b>console.firebase.google.com</b> واضغط <b>Create a project</b> (اسم أي شيء، وعطّل Google Analytics).</li>
@@ -2618,6 +2619,66 @@ function phonesDlg(){
   $('#phX').onclick=()=>{const r=cur().rows;if(!r.length){toast('لا توجد أرقام');return}dl('الأرقام.csv',csv([['الاسم','الرقم','النوع','المرحلة']].concat(r.map(x=>[x.nm,x.num.replace(/^20/,'0'),x.kind==='s'?'الشاب':'ولي الأمر',x.s.grade||'']))),'text/csv');logEv('تصدير الأرقام (CSV)')};
 }
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="phones"]');if(t){e.preventDefault();phonesDlg()}});
+
+/* ===== الأجهزة المتصلة (Presence) عبر نفس قاعدة المزامنة، والبيانات مشفّرة ===== */
+const DK='youthTracker.devname';
+function devInfo(){const ua=navigator.userAgent;let os='جهاز',br='متصفح';
+  if(/android/i.test(ua))os='أندرويد';else if(/iphone/i.test(ua))os='آيفون';else if(/ipad/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))os='آيباد';else if(/windows/i.test(ua))os='ويندوز';else if(/mac/i.test(ua))os='ماك';else if(/linux/i.test(ua))os='لينكس';
+  if(/edg\//i.test(ua))br='Edge';else if(/samsungbrowser/i.test(ua))br='Samsung';else if(/chrome|crios/i.test(ua))br='Chrome';else if(/firefox|fxios/i.test(ua))br='Firefox';else if(/safari/i.test(ua))br='Safari';
+  return {os,br,pwa:matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}}
+function devName(){try{const v=localStorage.getItem(DK);if(v)return v}catch(e){}const i=devInfo();return i.os+' • '+i.br}
+let pOff=0,pList=[],pBusy=false;
+const ago=ms=>{const s=Math.max(0,Math.round(ms/1000));return s<60?'منذ '+s+' ث':s<3600?'منذ '+Math.round(s/60)+' د':'منذ '+Math.round(s/3600)+' ساعة'};
+function pChip(){
+  const c=$('#devChip');if(!c)return;
+  if(!SYNC||!SYNC.on){c.style.display='none';return}
+  const n=pList.filter(x=>x.age<=75000).length||1;
+  c.style.display='';c.textContent='👥 '+n+(n===1?' جهاز':' أجهزة');c.title='الأجهزة المفتوحة الآن على نفس المزامنة';
+}
+async function pBeat(){
+  if(!SYNC||!SYNC.on||!navigator.onLine||pBusy){pChip();return}
+  pBusy=true;
+  try{
+    if(!sKey)sKey=await mkKey(SYNC.pass,SYNC.room);
+    const i=devInfo();
+    const r=await fb('/presence/'+SYNC.dev,'PUT',{d:await encO({n:devName(),u:ME?ME.name:'',os:i.os,br:i.br,pwa:i.pwa,v:!document.hidden}),t:{'.sv':'timestamp'}});
+    if(r&&typeof r.t==='number')pOff=r.t-Date.now();
+    const raw=(await fb('/presence'))||{},now=Date.now()+pOff,out=[];
+    for(const id in raw){
+      const x=raw[id];if(!x||typeof x.t!=='number')continue;
+      const age=now-x.t;
+      if(age>6*3600*1000&&id!==SYNC.dev){fb('/presence/'+id,'DELETE').catch(()=>{});continue}
+      try{out.push(Object.assign(await decO(x.d),{id,age}))}catch(e){}
+    }
+    pList=out;
+  }catch(e){}
+  finally{pBusy=false;pChip();const b=$('#devBox');if(b)devPaint()}
+}
+function devPaint(){
+  const b=$('#devBox');if(!b)return;
+  const rows=pList.filter(x=>x.age<=10*60*1000).sort((a,c)=>a.age-c.age);
+  const live=rows.filter(x=>x.age<=75000).length;
+  b.innerHTML=`<p style="margin:0 0 8px">المتصلون الآن: <b>${live}</b></p>`+(rows.length?rows.map(x=>{
+    const me=x.id===SYNC.dev,on=x.age<=75000;
+    const st=on?(x.v===false?'🟡 في الخلفية':'🟢 يعمل الآن'):'⚪ آخر ظهور '+ago(x.age);
+    return `<div class="card" style="margin:6px 0;padding:10px"><div class="row sp"><b>${esc(x.n||'جهاز')}${me?' <span class="badge g">هذا الجهاز</span>':''}</b><span>${st}</span></div><div class="muted" style="margin-top:4px">👤 ${esc(x.u||'بدون تسجيل دخول')} • ${esc(x.os||'')} • ${esc(x.br||'')}${x.pwa?' • تطبيق مثبّت':''}</div></div>`}).join(''):'<p class="muted">لا توجد أجهزة ظاهرة حاليًا</p>');
+}
+function devsDlg(){
+  if(!SYNC||!SYNC.on){toast('فعّل المزامنة أولًا من الإعدادات');return}
+  openM(`<div class="row sp"><h2 style="margin:0">👥 الأجهزة المتصلة</h2><button class="btn sm" data-act="closeM">✕</button></div>
+  <div id="devBox" style="margin:10px 0"><p class="muted">جارٍ التحميل…</p></div>
+  <label>اسم هذا الجهاز (يظهر للباقي)</label><div class="row"><input id="devNm" value="${esc(devName())}" maxlength="30" style="flex:1"><button class="btn pri" id="devSv">حفظ</button></div>
+  <p class="muted" style="margin-top:8px">الجهاز بيظهر بعد حوالي 20 ثانية من فتحه، وبيختفي لما يتقفل. البيانات مشفّرة زي باقي المزامنة.</p>`);
+  devPaint();pBeat();
+  $('#devSv').onclick=()=>{const v=$('#devNm').value.trim();try{v?localStorage.setItem(DK,v):localStorage.removeItem(DK)}catch(e){}pBeat();toast('تم حفظ اسم الجهاز')};
+  const iv=setInterval(()=>{if(!$('#devBox')){clearInterval(iv);return}pBeat()},8000);
+}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="devs"]');if(t){e.preventDefault();devsDlg()}});
+setInterval(()=>pBeat(),20000);
+setTimeout(()=>pBeat(),2500);
+document.addEventListener('visibilitychange',()=>pBeat());
+window.addEventListener('online',()=>pBeat());
+window.addEventListener('pagehide',()=>{try{if(SYNC&&SYNC.on)fetch(SYNC.url+'/youth/'+SYNC.room+'/presence/'+SYNC.dev+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
