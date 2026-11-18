@@ -640,11 +640,11 @@ function vMsg(){
   <textarea id="gtext">${esc(gText())}</textarea><div class="muted" style="margin:4px 0 8px">استخدم {الاسم} لإدراج الاسم الأول لكل شاب (في واتساب وSMS الفردي).</div>
   <div class="card" style="background:var(--in);margin:0" id="gprev"></div></div>
   <div class="card"><h2>3) الإرسال <span class="badge">${wn.length} مستلم</span>${noN?` <span class="badge y">${noN} بدون رقم</span>`:''}</h2>
-  ${wn.length?`<div class="row" style="margin-bottom:10px"><button class="btn wa" data-act="gnext">▶ واتساب: افتح التالي (${sent}/${wn.length})</button><button class="btn pri" data-act="gsms">✉️ SMS جماعي</button><button class="btn" data-act="gcopym">📋 نسخ الرسالة</button><button class="btn" data-act="gcopyn">📋 نسخ الأرقام</button>${sent?`<button class="btn sm" data-act="greset">تصفير الحالة</button>`:''}</div>
+  ${wn.length?`<div class="row" style="margin-bottom:10px"><button class="btn wa" data-act="gnext">▶ واتساب: افتح التالي (${sent}/${wn.length})</button><button class="btn pri" data-act="gsms">✉️ SMS جماعي</button><button class="btn" data-act="gcopym">📋 نسخ الرسالة</button><button class="btn" data-act="gcopyn">📋 نسخ الأرقام</button><button class="btn" data-act="gvcf">📇 حفظ الأرقام في جهات الاتصال</button>${sent?`<button class="btn sm" data-act="greset">تصفير الحالة</button>`:''}</div>
   <label style="display:flex;gap:7px;align-items:center;margin-bottom:10px;color:var(--tx);font-size:14px"><input type="checkbox" id="gtrack" ${G.track?'checked':''}> سجّل الإرسال تلقائيًا في سجل الافتقاد (ويُغلق طلب الافتقاد المفتوح)</label>
   ${G.smsPending?`<div class="card" style="background:var(--wab)">هل أُرسلت رسالة الـ SMS الجماعية؟ <button class="btn sm pri" data-act="gsmslog">نعم، سجّل الجميع</button> <button class="btn sm" data-act="gsmsno">لا</button></div>`:''}
   <div class="tw"><table><tr><th>الاسم</th><th>الرقم</th><th>الحالة</th><th>إرسال فردي</th></tr>${srows}</table></div>
-  <p class="muted"><b>ملاحظات:</b> واتساب لا يسمح بإرسال جماعي تلقائي من صفحة ويب، فكل ضغطة على «افتح التالي» تفتح محادثة الشاب برسالته الجاهزة وتضغط إرسال. ولو عندك قائمة بث في واتساب انسخ الرسالة والأرقام واستخدمها. الـ SMS الجماعي يفتح تطبيق الرسائل في الموبايل بكل الأرقام (بدون الاسم الشخصي)، وعلى الكمبيوتر قد لا يعمل.</p>`:'<div class="empty">اختر مستلمين لديهم أرقام تليفون</div>'}</div>`;
+  <div class="muted" style="line-height:1.9"><b>ليه الإرسال مش تلقائي؟</b> واتساب مش بيسمح لأي صفحة ويب إنها تبعت رسائل لوحدها لعدد من الناس — لازم كل محادثة تتفتح وتضغط «إرسال» بإيديك. ده قيد من واتساب نفسه مش عطل في النظام.<br><b>الطرق المتاحة:</b><br>1) <b>افتح التالي:</b> بيفتح محادثة كل شاب برسالة فيها اسمه، وتضغط إرسال (الأنسب للرسالة الشخصية).<br>2) <b>قائمة بث واتساب (أسرع للعدد الكبير):</b> اضغط «📇 حفظ الأرقام في جهات الاتصال» ← افتح الملف على الموبايل ← في واتساب: ⋮ ← «بث جديد» ← اختار الأسماء ← اكتب الرسالة (انسخها من «نسخ الرسالة»). القائمة بتوصل بس لمن حفظ رقمك عنده.<br>3) <b>SMS جماعي:</b> بيفتح تطبيق الرسائل في الموبايل بكل الأرقام (بدون الاسم الشخصي)، وعلى الكمبيوتر قد لا يعمل.</div>`:'<div class="empty">اختر مستلمين لديهم أرقام تليفون</div>'}</div>`;
 }
 
 function vSetAdmin(){
@@ -2679,6 +2679,14 @@ setTimeout(()=>pBeat(),2500);
 document.addEventListener('visibilitychange',()=>pBeat());
 window.addEventListener('online',()=>pBeat());
 window.addEventListener('pagehide',()=>{try{if(SYNC&&SYNC.on)fetch(SYNC.url+'/youth/'+SYNC.room+'/presence/'+SYNC.dev+'.json',{method:'DELETE',keepalive:true})}catch(e){}});
+
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act="gvcf"]');if(!t)return;e.preventDefault();
+  if(!can('contact')){toast('🔒 ليس لديك صلاحية');return}
+  const seen=new Set(),rows=[];
+  gRecips().forEach(s=>{const n=waNum(gNum(s));if(!n||n.length<10||seen.has(n))return;seen.add(n);rows.push({nm:(G.who==='parent'?'ولي أمر ':'')+s.name,num:n})});
+  if(!rows.length){toast('لا توجد أرقام صالحة');return}
+  dl('المستلمين.vcf',vcfOf(rows),'text/vcard;charset=utf-8');toast('تم تجهيز '+rows.length+' جهة اتصال — افتح الملف من الموبايل');
+});
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
